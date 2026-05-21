@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Carbon Project Command Centre</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      background: #f0f4f8;
+      color: #1a202c;
+      padding: 24px;
+    }
+
+    /* ── Loading overlay ── */
+    .loading-overlay {
+      position: fixed; inset: 0;
+      background: rgba(255,255,255,0.92);
+      z-index: 999;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1rem; color: #4a5568; gap: 12px;
+    }
+    .loading-overlay.hidden { display: none; }
+    .spinner {
+      width: 28px; height: 28px;
+      border: 3px solid #e2e8f0;
+      border-top-color: #4299e1;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Header ── */
+    header {
+      display: flex; justify-content: space-between;
+      align-items: flex-start; flex-wrap: wrap;
+      gap: 12px; margin-bottom: 28px;
+    }
+    header h1 { font-size: 1.8rem; color: #2d3748; }
+    header p  { color: #718096; margin-top: 4px; font-size: 0.9rem; }
+
+    .live-dot {
+      display: inline-block; width: 8px; height: 8px;
+      background: #48bb78; border-radius: 50%;
+      margin-right: 5px; animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+    }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 10px 18px; border-radius: 8px;
+      font-size: 0.88rem; font-weight: 600;
+      cursor: pointer; border: none;
+      transition: opacity 0.15s, transform 0.1s;
+    }
+    .btn:hover  { opacity: 0.88; transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-primary { background: #4299e1; color: #fff; }
+    .btn-danger  { background: #fed7d7; color: #822727; }
+    .btn-edit    { background: #bee3f8; color: #2a4365; }
+    .btn-ghost   { background: #edf2f7; color: #4a5568; }
+    .btn-sm      { padding: 5px 10px; font-size: 0.78rem; border-radius: 6px; }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      display: flex; flex-wrap: wrap;
+      gap: 10px; margin-bottom: 20px; align-items: center;
+    }
+    .filter-bar input,
+    .filter-bar select {
+      padding: 8px 12px; border: 1px solid #cbd5e0;
+      border-radius: 8px; font-size: 0.88rem;
+      background: #fff; color: #2d3748; outline: none;
+    }
+    .filter-bar input:focus,
+    .filter-bar select:focus { border-color: #4299e1; }
+    .filter-bar input { width: 220px; }
+
+    /* ── Summary Cards ── */
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px; margin-bottom: 32px;
+    }
+    .card {
+      background: #fff; border-radius: 10px;
+      padding: 20px 24px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      border-left: 5px solid #a0aec0;
+      cursor: pointer;
+      transition: box-shadow 0.15s, transform 0.15s;
+    }
+    .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); transform: translateY(-2px); }
+    .card.active-filter { outline: 3px solid #4299e1; }
+    .card .label {
+      font-size: 0.8rem; text-transform: uppercase;
+      letter-spacing: 0.05em; color: #718096; margin-bottom: 8px;
+    }
+    .card .value { font-size: 2.2rem; font-weight: 700; }
+    .card.total    { border-color: #4299e1; }
+    .card.total    .value { color: #2b6cb0; }
+    .card.overdue  { border-color: #fc8181; }
+    .card.overdue  .value { color: #c53030; }
+    .card.week     { border-color: #f6ad55; }
+    .card.week     .value { color: #c05621; }
+    .card.highrisk { border-color: #f6e05e; }
+    .card.highrisk .value { color: #975a16; }
+
+    /* ── Table ── */
+    .table-wrapper {
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow-x: auto;
+    }
+    .table-header {
+      display: flex; justify-content: space-between;
+      align-items: center; padding: 16px 24px;
+      border-bottom: 1px solid #e2e8f0; flex-wrap: wrap; gap: 10px;
+    }
+    .table-header h2 { font-size: 1.05rem; color: #2d3748; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    thead th {
+      background: #f7fafc; text-align: left;
+      padding: 12px 16px; font-size: 0.75rem;
+      text-transform: uppercase; letter-spacing: 0.05em;
+      color: #718096; border-bottom: 2px solid #e2e8f0;
+      cursor: pointer; user-select: none; white-space: nowrap;
+    }
+    thead th:hover { color: #4299e1; }
+    thead th.sorted .sort-icon { color: #4299e1; }
+
+    tbody tr { border-bottom: 1px solid #edf2f7; transition: background 0.15s; }
+    tbody tr:hover { background: #ebf8ff; }
+    tbody td { padding: 13px 16px; vertical-align: middle; }
+
+    .task-name { font-weight: 600; color: #2d3748; }
+
+    .badge {
+      display: inline-block; padding: 3px 10px;
+      border-radius: 12px; font-size: 0.75rem;
+      font-weight: 600; white-space: nowrap;
+    }
+    .s-done        { background: #c6f6d5; color: #22543d; }
+    .s-inprogress  { background: #bee3f8; color: #2a4365; }
+    .s-overdue     { background: #fed7d7; color: #822727; }
+    .s-notstarted  { background: #e2e8f0; color: #4a5568; }
+    .s-blocked     { background: #feebc8; color: #7b341e; }
+    .r-high        { background: #fed7d7; color: #822727; }
+    .r-medium      { background: #fefcbf; color: #744210; }
+    .r-low         { background: #c6f6d5; color: #22543d; }
+
+    .next-action { color: #4a5568; max-width: 280px; }
+    .due-date { white-space: nowrap; }
+    .due-date.overdue-date  { color: #c53030; font-weight: 600; }
+    .due-date.thisweek-date { color: #c05621; font-weight: 600; }
+    .actions-cell { white-space: nowrap; }
+    .no-results { text-align: center; padding: 40px; color: #a0aec0; font-size: 0.95rem; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45); z-index: 100;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff; border-radius: 12px;
+      width: 100%; max-width: 520px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+      animation: slideUp 0.2s ease;
+    }
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+    .modal-header {
+      display: flex; justify-content: space-between;
+      align-items: center; padding: 20px 24px;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .modal-header h3 { font-size: 1.1rem; color: #2d3748; }
+    .modal-close {
+      background: none; border: none; font-size: 1.4rem;
+      color: #a0aec0; cursor: pointer; line-height: 1;
+      padding: 2px 6px; border-radius: 4px;
+    }
+    .modal-close:hover { color: #718096; background: #edf2f7; }
+    .modal-body { padding: 24px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block; font-size: 0.8rem; font-weight: 600;
+      color: #4a5568; margin-bottom: 6px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid #cbd5e0; border-radius: 8px;
+      font-size: 0.9rem; color: #2d3748;
+      font-family: inherit; outline: none;
+      transition: border-color 0.15s;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      border-color: #4299e1;
+      box-shadow: 0 0 0 3px rgba(66,153,225,0.15);
+    }
+    .form-group textarea { resize: vertical; min-height: 72px; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .modal-footer {
+      display: flex; justify-content: flex-end; gap: 10px;
+      padding: 16px 24px; border-top: 1px solid #e2e8f0;
+    }
+
+    /* ── Confirm ── */
+    .confirm-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45); z-index: 200;
+      align-items: center; justify-content: center; padding: 20px;
+    }
+    .confirm-overlay.open { display: flex; }
+    .confirm-box {
+      background: #fff; border-radius: 12px; padding: 28px;
+      max-width: 360px; width: 100%; text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .confirm-box p { color: #4a5568; margin: 10px 0 22px; font-size: 0.95rem; }
+    .confirm-box h3 { color: #2d3748; }
+    .confirm-actions { display: flex; gap: 10px; justify-content: center; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed; bottom: 28px; right: 28px;
+      background: #2d3748; color: #fff;
+      padding: 12px 20px; border-radius: 8px;
+      font-size: 0.88rem; z-index: 300;
+      opacity: 0; transform: translateY(10px);
+      transition: opacity 0.25s, transform 0.25s;
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+
+    footer { text-align: center; margin-top: 28px; color: #a0aec0; font-size: 0.8rem; }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="spinner"></div> Connecting to database...
+</div>
+
+<!-- Header -->
+<header>
+  <div>
+    <h1>Carbon Project Command Centre</h1>
+    <p><span class="live-dot"></span>Live — synced across all devices &nbsp;|&nbsp; <span id="today"></span></p>
+  </div>
+  <button class="btn btn-primary" onclick="openModal()">+ Add Task</button>
+</header>
+
+<!-- Summary Cards -->
+<div class="cards">
+  <div class="card total"    onclick="filterByCard('all')"      id="card-all">
+    <div class="label">Total Tasks</div>
+    <div class="value" id="cnt-total">—</div>
+  </div>
+  <div class="card overdue"  onclick="filterByCard('overdue')"  id="card-overdue">
+    <div class="label">Overdue</div>
+    <div class="value" id="cnt-overdue">—</div>
+  </div>
+  <div class="card week"     onclick="filterByCard('week')"     id="card-week">
+    <div class="label">Due This Week</div>
+    <div class="value" id="cnt-week">—</div>
+  </div>
+  <div class="card highrisk" onclick="filterByCard('highrisk')" id="card-highrisk">
+    <div class="label">High-Risk Items</div>
+    <div class="value" id="cnt-highrisk">—</div>
+  </div>
+</div>
+
+<!-- Filter Bar -->
+<div class="filter-bar">
+  <input  type="text"   id="search-input"   placeholder="Search tasks or owners..." oninput="renderTable()" />
+  <select id="filter-status" onchange="renderTable()">
+    <option value="">All Statuses</option>
+    <option>In Progress</option>
+    <option>Not Started</option>
+    <option>Blocked</option>
+    <option>Done</option>
+    <option>Overdue</option>
+  </select>
+  <select id="filter-risk" onchange="renderTable()">
+    <option value="">All Risk Levels</option>
+    <option>High</option>
+    <option>Medium</option>
+    <option>Low</option>
+  </select>
+  <button class="btn btn-ghost btn-sm" onclick="clearFilters()">Clear Filters</button>
+</div>
+
+<!-- Task Table -->
+<div class="table-wrapper">
+  <div class="table-header">
+    <h2>All Tasks <span id="row-count" style="color:#a0aec0;font-weight:400;font-size:0.9rem;"></span></h2>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th onclick="sortBy('name')">Task <span class="sort-icon" id="sort-name">⇅</span></th>
+        <th onclick="sortBy('owner')">Owner <span class="sort-icon" id="sort-owner">⇅</span></th>
+        <th onclick="sortBy('due')">Due Date <span class="sort-icon" id="sort-due">⇅</span></th>
+        <th onclick="sortBy('status')">Status <span class="sort-icon" id="sort-status">⇅</span></th>
+        <th onclick="sortBy('risk')">Risk <span class="sort-icon" id="sort-risk">⇅</span></th>
+        <th>Next Action</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="task-tbody"></tbody>
+  </table>
+</div>
+
+<footer>Carbon Project Command Centre &nbsp;&mdash;&nbsp; Powered by Firebase &nbsp;&mdash;&nbsp; Data syncs live across all devices</footer>
+
+<!-- Add / Edit Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="handleOverlayClick(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modal-title">Add New Task</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Task Name *</label>
+        <input type="text" id="f-name" placeholder="e.g. Verra PRR Response" />
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Owner *</label>
+          <input type="text" id="f-owner" placeholder="e.g. Rahul Sharma" />
+        </div>
+        <div class="form-group">
+          <label>Due Date *</label>
+          <input type="date" id="f-due" />
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Status</label>
+          <select id="f-status">
+            <option>Not Started</option>
+            <option>In Progress</option>
+            <option>Blocked</option>
+            <option>Done</option>
+            <option>Overdue</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Risk Level</label>
+          <select id="f-risk">
+            <option>Low</option>
+            <option>Medium</option>
+            <option>High</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Next Action</label>
+        <textarea id="f-nextaction" placeholder="What needs to happen next?"></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveTask()">Save Task</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirm -->
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <h3>Delete Task?</h3>
+    <p>This will permanently remove the task from all devices.</p>
+    <div class="confirm-actions">
+      <button class="btn btn-ghost" onclick="closeConfirm()">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Firebase SDK (loaded as ES module) -->
+<script type="module">
+  import { initializeApp }   from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getFirestore, collection, onSnapshot,
+           addDoc, updateDoc, deleteDoc,
+           doc, getDocs }    from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+  // ── Firebase config ────────────────────────────────────────────────────────
+  const firebaseConfig = {
+    apiKey:            "AIzaSyBLJPl_pcsy6AvB476gUNldNH1tAGvv9uY",
+    authDomain:        "carbon-dashboard-142ac.firebaseapp.com",
+    projectId:         "carbon-dashboard-142ac",
+    storageBucket:     "carbon-dashboard-142ac.firebasestorage.app",
+    messagingSenderId: "680494298253",
+    appId:             "1:680494298253:web:d696cc925c36f1e41b1ec4"
+  };
+
+  const app      = initializeApp(firebaseConfig);
+  const db       = getFirestore(app);
+  const tasksCol = collection(db, 'tasks');
+
+  // ── Default seed data ──────────────────────────────────────────────────────
+  const DEFAULT_TASKS = [
+    { name: "Verra PRR Response",             owner: "Rahul Sharma", due: "2026-05-18", status: "Overdue",     risk: "High",   nextAction: "Submit revised methodology response to Verra registry by end of day" },
+    { name: "VVB Audit Closure",               owner: "Priya Mehta",  due: "2026-05-23", status: "In Progress", risk: "High",   nextAction: "Share outstanding field evidence documents with VVB auditor" },
+    { name: "Farmer Agreement Completion",     owner: "Amit Verma",   due: "2026-05-24", status: "In Progress", risk: "Medium", nextAction: "Follow up with 3 remaining villages to collect signed agreements" },
+    { name: "Monitoring Report Preparation",   owner: "Sneha Joshi",  due: "2026-06-05", status: "In Progress", risk: "Medium", nextAction: "Complete data aggregation for Q1 monitoring period" },
+    { name: "Buyer Due Diligence Response",    owner: "Karan Singh",  due: "2026-05-22", status: "In Progress", risk: "High",   nextAction: "Prepare project risk summary and additionality documentation for buyer" },
+    { name: "Baseline Data Submission",        owner: "Rahul Sharma", due: "2026-05-15", status: "Done",        risk: "Low",    nextAction: "No action needed — submitted and acknowledged" },
+    { name: "Carbon Credit Issuance Follow-up",owner: "Priya Mehta",  due: "2026-06-15", status: "Not Started", risk: "Low",   nextAction: "Initiate issuance request once VVB closure is confirmed" },
+    { name: "Field Verification Sign-offs",    owner: "Amit Verma",   due: "2026-05-20", status: "Blocked",     risk: "Medium", nextAction: "Resolve state permit issue blocking field access in District B" }
+  ];
+
+  // ── State ──────────────────────────────────────────────────────────────────
+  let tasks      = [];
+  let editingId  = null;
+  let deletingId = null;
+  let cardFilter = 'all';
+  let sortKey    = 'due';
+  let sortDir    = 1;
+
+  // ── Seed on first load ─────────────────────────────────────────────────────
+  async function seedIfEmpty() {
+    const snap = await getDocs(tasksCol);
+    if (snap.empty) {
+      for (const t of DEFAULT_TASKS) await addDoc(tasksCol, t);
+    }
+  }
+  seedIfEmpty();
+
+  // ── Real-time listener — fires on any device change ────────────────────────
+  onSnapshot(tasksCol, snap => {
+    tasks = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    document.getElementById('loading-overlay').classList.add('hidden');
+    renderTable();
+  });
+
+  // ── Date helpers ───────────────────────────────────────────────────────────
+  const today = new Date(); today.setHours(0,0,0,0);
+  const weekEnd = new Date(today); weekEnd.setDate(today.getDate() + 7);
+
+  function parseDate(s) { const [y,m,d] = s.split('-').map(Number); return new Date(y,m-1,d); }
+  function formatDate(s) { return parseDate(s).toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'}); }
+  function isOverdue(t)     { return parseDate(t.due) < today && t.status !== 'Done'; }
+  function isDueThisWeek(t) { const d=parseDate(t.due); return d>=today && d<=weekEnd && t.status!=='Done'; }
+
+  document.getElementById('today').textContent =
+    today.toLocaleDateString('en-IN',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+
+  // ── Sorting ────────────────────────────────────────────────────────────────
+  const riskOrder   = { High:0, Medium:1, Low:2 };
+  const statusOrder = { Overdue:0, Blocked:1, 'In Progress':2, 'Not Started':3, Done:4 };
+
+  function cmp(a,b) {
+    let av=a[sortKey], bv=b[sortKey];
+    if (sortKey==='risk')   return sortDir*((riskOrder[av]??9)-(riskOrder[bv]??9));
+    if (sortKey==='status') return sortDir*((statusOrder[av]??9)-(statusOrder[bv]??9));
+    if (sortKey==='due')    return sortDir*(parseDate(av)-parseDate(bv));
+    return sortDir*String(av).localeCompare(String(bv));
+  }
+
+  // ── Badge maps ─────────────────────────────────────────────────────────────
+  const statusClass = { Done:'s-done','In Progress':'s-inprogress',Overdue:'s-overdue','Not Started':'s-notstarted',Blocked:'s-blocked' };
+  const riskClass   = { High:'r-high',Medium:'r-medium',Low:'r-low' };
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  function renderTable() {
+    const search  = document.getElementById('search-input').value.toLowerCase();
+    const fStatus = document.getElementById('filter-status').value;
+    const fRisk   = document.getElementById('filter-risk').value;
+
+    // Sort icons
+    ['name','owner','due','status','risk'].forEach(k => {
+      const el = document.getElementById('sort-'+k);
+      if (!el) return;
+      el.parentElement.classList.toggle('sorted', sortKey===k);
+      el.textContent = sortKey===k ? (sortDir===1?'▲':'▼') : '⇅';
+    });
+
+    let filtered = tasks.filter(t => {
+      if (cardFilter==='overdue'  && !isOverdue(t))     return false;
+      if (cardFilter==='week'     && !isDueThisWeek(t)) return false;
+      if (cardFilter==='highrisk' && t.risk!=='High')   return false;
+      if (fStatus && t.status !== fStatus) return false;
+      if (fRisk   && t.risk   !== fRisk)   return false;
+      if (search && !(
+        t.name.toLowerCase().includes(search) ||
+        t.owner.toLowerCase().includes(search) ||
+        (t.nextAction||'').toLowerCase().includes(search)
+      )) return false;
+      return true;
+    });
+    filtered.sort(cmp);
+
+    // Cards
+    let cntO=0, cntW=0, cntH=0;
+    tasks.forEach(t => { if(isOverdue(t)) cntO++; if(isDueThisWeek(t)) cntW++; if(t.risk==='High') cntH++; });
+    document.getElementById('cnt-total').textContent   = tasks.length;
+    document.getElementById('cnt-overdue').textContent  = cntO;
+    document.getElementById('cnt-week').textContent     = cntW;
+    document.getElementById('cnt-highrisk').textContent = cntH;
+    document.getElementById('row-count').textContent =
+      filtered.length===tasks.length ? `(${filtered.length})` : `(showing ${filtered.length} of ${tasks.length})`;
+
+    const tbody = document.getElementById('task-tbody');
+    tbody.innerHTML = '';
+    if (!filtered.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="no-results">No tasks match your filters.</td></tr>`;
+      return;
+    }
+    filtered.forEach(t => {
+      const dc = isOverdue(t) ? 'overdue-date' : (isDueThisWeek(t) ? 'thisweek-date' : '');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="task-name">${esc(t.name)}</td>
+        <td>${esc(t.owner)}</td>
+        <td class="due-date ${dc}">${formatDate(t.due)}</td>
+        <td><span class="badge ${statusClass[t.status]||''}">${esc(t.status)}</span></td>
+        <td><span class="badge ${riskClass[t.risk]||''}">${esc(t.risk)}</span></td>
+        <td class="next-action">${esc(t.nextAction||'')}</td>
+        <td class="actions-cell">
+          <button class="btn btn-edit btn-sm"   onclick="window._edit('${t.id}')">Edit</button>
+          <button class="btn btn-danger btn-sm" onclick="window._askDelete('${t.id}')" style="margin-left:6px">Delete</button>
+        </td>`;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ── Modal: open/close ──────────────────────────────────────────────────────
+  function openModal(id) {
+    editingId = id || null;
+    document.getElementById('modal-title').textContent = id ? 'Edit Task' : 'Add New Task';
+    if (id) {
+      const t = tasks.find(t=>t.id===id);
+      document.getElementById('f-name').value       = t.name;
+      document.getElementById('f-owner').value      = t.owner;
+      document.getElementById('f-due').value        = t.due;
+      document.getElementById('f-status').value     = t.status;
+      document.getElementById('f-risk').value       = t.risk;
+      document.getElementById('f-nextaction').value = t.nextAction||'';
+    } else {
+      document.getElementById('f-name').value       = '';
+      document.getElementById('f-owner').value      = '';
+      document.getElementById('f-due').value        = '';
+      document.getElementById('f-status').value     = 'Not Started';
+      document.getElementById('f-risk').value       = 'Low';
+      document.getElementById('f-nextaction').value = '';
+    }
+    document.getElementById('modal-overlay').classList.add('open');
+    setTimeout(()=>document.getElementById('f-name').focus(),100);
+  }
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.remove('open');
+    editingId = null;
+  }
+
+  // ── Save (add or update) ───────────────────────────────────────────────────
+  async function saveTask() {
+    const name       = document.getElementById('f-name').value.trim();
+    const owner      = document.getElementById('f-owner').value.trim();
+    const due        = document.getElementById('f-due').value;
+    const status     = document.getElementById('f-status').value;
+    const risk       = document.getElementById('f-risk').value;
+    const nextAction = document.getElementById('f-nextaction').value.trim();
+
+    if (!name || !owner || !due) { showToast('Please fill in Task Name, Owner, and Due Date.'); return; }
+
+    try {
+      if (editingId) {
+        await updateDoc(doc(db,'tasks',editingId), { name,owner,due,status,risk,nextAction });
+        showToast('Task updated.');
+      } else {
+        await addDoc(tasksCol, { name,owner,due,status,risk,nextAction });
+        showToast('Task added.');
+      }
+      closeModal();
+    } catch(e) { showToast('Error saving. Check your connection.'); }
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+  function askDelete(id) {
+    deletingId = id;
+    document.getElementById('confirm-overlay').classList.add('open');
+  }
+  function closeConfirm() {
+    document.getElementById('confirm-overlay').classList.remove('open');
+    deletingId = null;
+  }
+  async function confirmDelete() {
+    try {
+      await deleteDoc(doc(db,'tasks',deletingId));
+      showToast('Task deleted.');
+    } catch(e) { showToast('Error deleting. Check your connection.'); }
+    closeConfirm();
+  }
+
+  // ── Filters / sorting ──────────────────────────────────────────────────────
+  function filterByCard(type) {
+    cardFilter = (cardFilter===type) ? 'all' : type;
+    document.querySelectorAll('.card').forEach(c=>c.classList.remove('active-filter'));
+    if (cardFilter!=='all') document.getElementById('card-'+cardFilter).classList.add('active-filter');
+    renderTable();
+  }
+  function clearFilters() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('filter-status').value = '';
+    document.getElementById('filter-risk').value = '';
+    cardFilter = 'all';
+    document.querySelectorAll('.card').forEach(c=>c.classList.remove('active-filter'));
+    renderTable();
+  }
+  function sortBy(key) {
+    sortDir = sortKey===key ? sortDir*-1 : 1;
+    sortKey = key;
+    renderTable();
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  let toastTimer;
+  function showToast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg; el.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=>el.classList.remove('show'), 2800);
+  }
+
+  // ── Keyboard ───────────────────────────────────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.key==='Escape') { closeModal(); closeConfirm(); }
+    if (e.key==='Enter' && document.getElementById('modal-overlay').classList.contains('open'))
+      if (document.activeElement.tagName !== 'TEXTAREA') saveTask();
+  });
+
+  // ── Overlay click to close ─────────────────────────────────────────────────
+  document.getElementById('modal-overlay').addEventListener('click', e => {
+    if (e.target===document.getElementById('modal-overlay')) closeModal();
+  });
+
+  // ── Expose to global scope (needed for onclick in HTML) ────────────────────
+  window.openModal      = openModal;
+  window.closeModal     = closeModal;
+  window.saveTask       = saveTask;
+  window.closeConfirm   = closeConfirm;
+  window.confirmDelete  = confirmDelete;
+  window.filterByCard   = filterByCard;
+  window.clearFilters   = clearFilters;
+  window.sortBy         = sortBy;
+  window.handleOverlayClick = (e) => { if(e.target===document.getElementById('modal-overlay')) closeModal(); };
+  window._edit      = (id) => openModal(id);
+  window._askDelete = (id) => askDelete(id);
+
+</script>
+</body>
+</html>
